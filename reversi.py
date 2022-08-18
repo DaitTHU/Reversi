@@ -9,8 +9,8 @@ os.environ["USE_SIMPLE_THREADED_LEVEL3"] = "1"
 # DO NOT MODIFY THE CODE ABOVE
 
 # add your own imports below
-# define your helper functions here
 from time import time
+# define your helper functions here
 
 
 def index(x: int, y: int): return (x << 3) + y
@@ -19,7 +19,7 @@ def index(x: int, y: int): return (x << 3) + y
 def inside(x: int, y: int): return (0 <= x < 8) and (0 <= y < 8)
 
 
-def coord(i: int): return i >> 3, i & 7
+def coord(i: int): return divmod(i, 8)
 
 
 def x_(i: int): return i >> 3  # i // 8
@@ -30,22 +30,23 @@ def y_(i: int): return i & 7  # i % 8
 
 X, Y = 0, 1
 INF = 1000000
+start_time: float
 # 8 disk-eating directions
-DIRCTIONS = ((-1, -1), (0, -1), (1, -1), (-1, 0),
-             (1, 0), (-1, 1), (0, 1), (1, 1))
-# this weight array copied from https://botzone.org.cn/game/ranklist/53e1db360003e29c2ba227b8?page=0
+DIRCTIONS_COORD = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+DIRCTIONS_INDEX = (-9, -8, -7, -1, 1, 7, 8, 9)
+# ref: https://botzone.org.cn/game/ranklist/53e1db360003e29c2ba227b8?page=0
 WEIGHT = (
-    20, -3, 11, 8, 8, 11, -3, 20,
-    -3, -7, -4, 1, 1, -4, -7, -3,
-    11, -4, 2, 2, 2, 2, -4, 11,
-    8, 1, 2, -3, -3, 2, 1, 8,
-    8, 1, 2, -3, -3, 2, 1, 8,
-    11, -4, 2, 2, 2, 2, -4, 11,
-    -3, -7, -4, 1, 1, -4, -7, -3,
-    20, -3, 11, 8, 8, 11, -3, 20
+    20, -3, 11,  8,  8, 11, -3, 20,
+    -3, -7,  1,  1,  1,  1, -7, -3,
+    11,  1,  2,  2,  2,  2,  1, 11,
+     8,  1,  2, -3, -3,  2,  1,  8,
+     8,  1,  2, -3, -3,  2,  1,  8,
+    11,  1,  2,  2,  2,  2,  1, 11,
+    -3, -7,  1,  1,  1,  1, -7, -3,
+    20, -3, 11,  8,  8, 11, -3, 20
 )
 # 4 corners where stable disks origin
-CORNERS = {(0, 0): (1, 1), (7, 0): (-1, 1), (0, 7): (1, -1), (7, 7): (-1, -1)}
+CORNERS = (((0, 0), (1, 1)), ((7, 0), (-1, 1)), ((0, 7), (1, -1)), ((7, 7), (-1, -1)))
 
 
 class Reversi:
@@ -57,32 +58,28 @@ class Reversi:
         'player: 0 or 1, empty board: 2, len(allow) = 64'
         self._id = player
         self._board = board.copy()  # copy or not, that's the question
-        self._feasible = 0
 
     def value(self) -> int:
         'give a weighted value for player AFTER play'
         value = 0
-        space_num = self._board.count(2)
-        # final part
-        if space_num == 0:
-            for i, disk in enumerate(self._board):
-                value -= 100 if disk == self._id else -100
+        if (space_num := self._board.count(2)) == 0:
+            for disk in self._board:
+                value += -1 if disk == self._id else 1
             return value
         # basic value: add all disks' weights
-        for i, disk in enumerate(self._board):
+        for disk, weight in zip(self._board, WEIGHT):
             if disk == 1 - self._id:
-                value += WEIGHT[i]
+                value += weight
             elif disk == self._id:
-                value -= WEIGHT[i]
-        # beginning part
+                value -= weight
+        # begin part
         if space_num > 40:
             return value
         # search stable disks, from corner(i.e. triangle)
         stables = [False] * 64
-        for corner, direction in CORNERS.items():
+        for corner, direction in CORNERS:
             x, y = corner
-            corner_id = self._board[index(x, y)]
-            if corner_id == 2:
+            if (corner_id := self._board[index(x, y)]) == 2:
                 continue
             dx = 0  # i.e. delta x
             dy_max = 8
@@ -92,7 +89,7 @@ class Reversi:
                     dy += 1
                     if not stables[index(x, y)]:  # stable disk
                         stables[index(x, y)] = True
-                        value -= 100 if corner_id == self._id else -100
+                        value += -30 if corner_id == self._id else 30
                     y += direction[Y]
                 dx += 1
                 dy_max = min(dy, dy_max)
@@ -105,16 +102,14 @@ class Reversi:
         oppo = Reversi(1 - self._id, self._board)
         oppo._board[choice] = self._id
         # 8 available
-        for i, direction in enumerate(DIRCTIONS):
+        for i, direction in enumerate(DIRCTIONS_INDEX):
             if self._feasible & (1 << i) == 0:
                 continue
             # filp
-            x = x_(choice) + direction[X]
-            y = y_(choice) + direction[Y]
-            while self._board[index(x, y)] == oppo._id:
-                oppo._board[index(x, y)] = self._id
-                x += direction[X]
-                y += direction[Y]
+            near = choice + direction
+            while self._board[near] == oppo._id:
+                oppo._board[near] = self._id
+                near += direction
         return oppo
 
     def feasible(self, choice: int) -> bool:
@@ -122,59 +117,59 @@ class Reversi:
         if self._board[choice] != 2:
             return False
         # 8 directions
-        for i, direction in enumerate(DIRCTIONS):
-            x = x_(choice) + direction[X]
-            y = y_(choice) + direction[Y]
+        for i, (direction_x, direction_y) in enumerate(DIRCTIONS_COORD):
+            x = x_(choice) + direction_x
+            y = y_(choice) + direction_y
             if not (inside(x, y) and self._board[index(x, y)] == 1 - self._id):
                 continue
-            x += direction[X]
-            y += direction[Y]  # if only python has do...while
-            while inside(x, y) and self._board[index(x, y)] == 1 - self._id:
-                x += direction[X]
-                y += direction[Y]
-            if inside(x, y) and self._board[index(x, y)] == self._id:
-                self._feasible |= (1 << i)
+            while True:
+                x += direction_x
+                y += direction_y
+                if inside(x, y):
+                    if (disk := self._board[index(x, y)]) == 1 - self._id:
+                        continue
+                    elif disk == self._id:
+                        self._feasible |= (1 << i)
+                break
         return (self._feasible > 0)
 
-
-def alpha_beta(node: Reversi, depth: int, alpha: int, beta: int, AI_turn: bool, start_time):
-    if time() - start_time > 2.9:
-        return INF if AI_turn else -INF
-    if depth == 0 or node._board.count(2) == 0:
-        return node.value()
-    if AI_turn:
-        value = -INF
-        for strat in range(64):
-            if not node.feasible(strat):
-                continue
-            child_node = node.play(strat)
-            value = max(value, alpha_beta(
-                child_node, depth - 1, alpha, beta, False, start_time))
-            if value >= beta:
-                break
-            alpha = max(alpha, value)
-    else:
-        value = INF
-        for strat in range(64):
-            if not node.feasible(strat):
-                continue
-            child_node = node.play(strat)
-            value = min(value, alpha_beta(
-                child_node, depth - 1, alpha, beta, True, start_time))
-            if value <= alpha:
-                break
-            beta = min(beta, value)
-    return value
+    def alpha_beta(self, depth: int, alpha: int, beta: int, AI_turn: bool):
+        global start_time
+        if time() - start_time > 2.9:
+            return INF if AI_turn else -INF
+        if depth == 0 or self._board.count(2) == 0:
+            return self.value()
+        if AI_turn:
+            value = -INF
+            for strat in range(64):
+                if not self.feasible(strat):
+                    continue
+                child = self.play(strat)
+                value = max(value, child.alpha_beta(depth - 1, alpha, beta, False))
+                if value >= beta:
+                    break  # purning
+                alpha = max(alpha, value)
+        else:
+            value = INF
+            for strat in range(64):
+                if not self.feasible(strat):
+                    continue
+                child = self.play(strat)
+                value = min(value, child.alpha_beta(depth - 1, alpha, beta, True))
+                if value <= alpha:
+                    break
+                beta = min(beta, value)
+        return value
 
 
 def reversi_ai(player: int, board: List[int], allow: List[bool]) -> Tuple[int, int]:
     'player: 0 or 1, empty board: 2, len(allow) = 64'
     # set timer
+    global start_time
     start_time = time()
     # create Reversi
     now = Reversi(player, board)
-    space_num = now._board.count(2)
-    print(space_num, file=sys.stderr, flush=True)
+    print(space_num := now._board.count(2), file=sys.stderr, flush=True)
     # find strategies
     ai_strats = [i for i, feasible in enumerate(allow) if feasible]
     best_4_strat = best_6_strat = ai_strats[0]
@@ -184,7 +179,7 @@ def reversi_ai(player: int, board: List[int], allow: List[bool]) -> Tuple[int, i
     for i, strat in enumerate(ai_strats):
         now.feasible(strat)
         node = now.play(strat)
-        value = alpha_beta(node, shallow, -INF, INF, False, start_time)
+        value = node.alpha_beta(shallow, -INF, INF, False)
         if value > max_value:
             max_value = value
             best_4_strat = strat
@@ -199,7 +194,7 @@ def reversi_ai(player: int, board: List[int], allow: List[bool]) -> Tuple[int, i
     for i, strat in enumerate(ai_strats):
         now.feasible(strat)
         node = now.play(strat)
-        value = alpha_beta(node, deep, -INF, INF, False, start_time)
+        value = node.alpha_beta(deep, -INF, INF, False)
         if value > max_value:
             max_value = value
             best_6_strat = strat
