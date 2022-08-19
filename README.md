@@ -48,21 +48,23 @@
 
 ### 效率
 
-经过随机生成棋盘进行测速，得到如下数据
+经过随机生成棋盘进行测速，本人电脑配置 Intel(R) Core(TM) i7-10510U CPU @ 1.80GHz   2.30 GHz，得到如下数据
 
 |`Reversi` 成员函数         |速度            |
 |-                          |-              | 
 |`value()`                  | ~35000 it/s   |
 |`feasible(i)`              | ~60000 it/s   |
-|`play(i)`                  | ~5500 it/s    |
+|`play(i)`                  | ~9000 it/s    |
 
-其中 `play(i)` 包含一个完整的过程 
+一个完整的生成所有可能子棋盘的过程： 
 
 ```python
 for i in range(64):
     if now.feasible(i):
         new = now.play(i)
+        value = new.value()
 ```
+速度为 ~4500 it/s，在 2.9 s 的时间限制下可以遍历 ~12500 个棋盘下的 ~100000 种可能情况并进行打分。
 
 ## 心得
 
@@ -80,7 +82,7 @@ for i in range(64):
 
 1. [黑白棋天地](http://www.soongsky.com/othello/)：基本策略和电脑黑白棋栏较为有用
 
-2. Saiblo 类似平台：隔壁的 [Botzone](https://botzone.org.cn/)，里面甚至有部分选手主动公开的源码（当然了Saiblo 高分得主很多也上传到自己的 github 上了）
+2. Saiblo 类似平台：隔壁的 [Botzone](https://botzone.org.cn/)，里面甚至有部分选手主动公开的源码（当然了 Saiblo 高分得主很多也上传到自己的 github 上了）
 
 3. 最强的黑白棋之一：[WZebra](http://radagast.se/othello/download.html)
 
