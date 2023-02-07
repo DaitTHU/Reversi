@@ -1,2 +1,5 @@
 test.*
+*.test.py
 *.save.py
+record.txt
+__pycache__
